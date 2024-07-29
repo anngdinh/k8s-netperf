@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: netperf-pod
+  labels:
+    app: netperf-pod
+spec:
+  selector:
+    matchLabels:
+      app: netperf-pod
+  template:
+    metadata:
+      labels:
+        app: netperf-pod
+    spec:
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: netperf-pod
+        image: vcr.vngcloud.vn/60108-annd2-ingress/k8s-netperf:1.0.0
+        ports:
+        - containerPort: 5001
+        - containerPort: 8079
+        - containerPort: 8080
+        - containerPort: 8081
+        - containerPort: 12865
+
+---
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: netperf-host
+  labels:
+    app: netperf-host
+spec:
+  selector:
+    matchLabels:
+      app: netperf-host
+  template:
+    metadata:
+      labels:
+        app: netperf-host
+    spec:
+      hostNetwork: true
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: netperf-host
+        image: vcr.vngcloud.vn/60108-annd2-ingress/k8s-netperf:1.0.0
+        ports:
+        - containerPort: 5001
+        - containerPort: 8079
+        - containerPort: 8080
+        - containerPort: 8081
+        - containerPort: 12865
