@@ -5,6 +5,10 @@ PING_COUNT=30000
 
 IPERF_TIME=60
 
+NETPERF_TIME=60
+NETPERF_REQUEST_PACKET_SIZE=1024
+NETPERF_RESPONSE_PACKET_SIZE=1024
+
 NODE_1=""
 NODE_2=""
 POD_LOCAL_1=""
@@ -18,6 +22,10 @@ POD_LOCAL_1_IP=""
 POD_LOCAL_2_IP=""
 POD_REMOTE_1_IP=""
 POD_REMOTE_2_IP=""
+
+remove_all_whitespace() {
+    echo "$1" | tr -d '[:space:]'
+}
 
 pingFunc() {
     local pod=$1
@@ -37,6 +45,41 @@ iperfFunc() {
     local output=$(kubectl exec -it $pod -- iperf -c $target_ip -i 1 -t $time)
     echo "[ ID] Interval       Transfer     Bandwidth"
     echo "$output" | tail -n 1
+}
+
+netperfFunc() {
+    local pod=$1
+    local target_ip=$2
+    local time=$3
+    local type=$4
+    local format=$5
+    echo "- Running: kubectl exec -it $pod -- netperf -H $target_ip -l $time -P 1 -t $type -- -r $NETPERF_REQUEST_PACKET_SIZE,$NETPERF_RESPONSE_PACKET_SIZE -o \"$format\""
+    local output=$(kubectl exec -it $pod -- netperf -H $target_ip -l $time -P 1 -t $type -- -r $NETPERF_REQUEST_PACKET_SIZE,$NETPERF_RESPONSE_PACKET_SIZE -o "$format")
+    # echo "$output" | tail -n 2
+
+    key=$(remove_all_whitespace "$format")
+    value=$(remove_all_whitespace "$(echo "$output" | tail -n 1)")
+    # echo "key: $key"
+    # echo "value: $value"
+
+    # Convert the comma-separated strings into arrays
+    IFS=',' set -- $key
+    keys="$@"
+
+    IFS=',' set -- $value
+    values="$@"
+
+    # Print the header row
+    for k in $keys; do
+        printf "%-15s" "$k"
+    done
+    printf "\n"
+
+    # Print the value row
+    for v in $values; do
+        printf "%-15s" "$v"
+    done
+    printf "\n"
 }
 
 getPodsWithPrefixOnNode() {
@@ -129,8 +172,48 @@ echo "********** Iperf Node to Pod **********"
 iperfFunc $POD_LOCAL_1 $POD_REMOTE_2_IP $IPERF_TIME
 iperfFunc $POD_LOCAL_2 $POD_REMOTE_1_IP $IPERF_TIME
 echo "***************************************"
+echo ""
 
 echo "********** Iperf Pod to Pod **********"
 iperfFunc $POD_REMOTE_1 $POD_REMOTE_2_IP $IPERF_TIME
 iperfFunc $POD_REMOTE_2 $POD_REMOTE_1_IP $IPERF_TIME
 echo "**************************************"
+echo ""
+
+############ Netperf long connection ############
+echo "********** Netperf Long Node to Node **********"
+netperfFunc $POD_LOCAL_1 $NODE_2_IP $NETPERF_TIME TCP_RR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
+netperfFunc $POD_LOCAL_2 $NODE_1_IP $NETPERF_TIME TCP_RR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
+echo "***********************************************"
+echo ""
+
+echo "********** Netperf Long Node to Pod **********"
+netperfFunc $POD_LOCAL_1 $POD_REMOTE_2_IP $NETPERF_TIME TCP_RR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
+netperfFunc $POD_LOCAL_2 $POD_REMOTE_1_IP $NETPERF_TIME TCP_RR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
+echo "**********************************************"
+echo ""
+
+echo "********** Netperf Long Pod to Pod **********"
+netperfFunc $POD_REMOTE_1 $POD_REMOTE_2_IP $NETPERF_TIME TCP_RR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
+netperfFunc $POD_REMOTE_2 $POD_REMOTE_1_IP $NETPERF_TIME TCP_RR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
+echo "*********************************************"
+echo ""
+
+# ############ Netperf short connection ############
+echo "********** Netperf Short Node to Node **********"
+netperfFunc $POD_LOCAL_1 $NODE_2_IP $NETPERF_TIME TCP_CRR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
+netperfFunc $POD_LOCAL_2 $NODE_1_IP $NETPERF_TIME TCP_CRR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
+echo "************************************************"
+echo ""
+
+echo "********** Netperf Short Node to Pod **********"
+netperfFunc $POD_LOCAL_1 $POD_REMOTE_2_IP $NETPERF_TIME TCP_CRR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
+netperfFunc $POD_LOCAL_2 $POD_REMOTE_1_IP $NETPERF_TIME TCP_CRR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
+echo "***********************************************"
+echo ""
+
+echo "********** Netperf Short Pod to Pod **********"
+netperfFunc $POD_REMOTE_1 $POD_REMOTE_2_IP $NETPERF_TIME TCP_CRR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
+netperfFunc $POD_REMOTE_2 $POD_REMOTE_1_IP $NETPERF_TIME TCP_CRR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
+echo "**********************************************"
+echo ""
