@@ -3,6 +3,8 @@
 PING_INTERVAL=0.001
 PING_COUNT=30000
 
+IPERF_TIME=60
+
 NODE_1=""
 NODE_2=""
 POD_LOCAL_1=""
@@ -25,6 +27,16 @@ pingFunc() {
     echo "- Running: kubectl exec -it $pod -- ping -c $count -i $interval -q $target_ip"
     local output=$(kubectl exec -it $pod -- ping -c $count -i $interval -q $target_ip)
     echo "$output" | tail -n 2
+}
+
+iperfFunc() {
+    local pod=$1
+    local target_ip=$2
+    local time=$3
+    echo "- Running: kubectl exec -it $pod -- iperf -c $target_ip -i 1 -t $time"
+    local output=$(kubectl exec -it $pod -- iperf -c $target_ip -i 1 -t $time)
+    echo "[ ID] Interval       Transfer     Bandwidth"
+    echo "$output" | tail -n 1
 }
 
 getPodsWithPrefixOnNode() {
@@ -105,3 +117,20 @@ pingFunc $POD_REMOTE_1 $POD_REMOTE_2_IP $PING_INTERVAL $PING_COUNT
 pingFunc $POD_REMOTE_2 $POD_REMOTE_1_IP $PING_INTERVAL $PING_COUNT
 echo "*************************************"
 echo ""
+
+############ Iperf ############
+echo "********** Iperf Node to Node **********"
+iperfFunc $POD_LOCAL_1 $NODE_2_IP $IPERF_TIME
+iperfFunc $POD_LOCAL_2 $NODE_1_IP $IPERF_TIME
+echo "****************************************"
+echo ""
+
+echo "********** Iperf Node to Pod **********"
+iperfFunc $POD_LOCAL_1 $POD_REMOTE_2_IP $IPERF_TIME
+iperfFunc $POD_LOCAL_2 $POD_REMOTE_1_IP $IPERF_TIME
+echo "***************************************"
+
+echo "********** Iperf Pod to Pod **********"
+iperfFunc $POD_REMOTE_1 $POD_REMOTE_2_IP $IPERF_TIME
+iperfFunc $POD_REMOTE_2 $POD_REMOTE_1_IP $IPERF_TIME
+echo "**************************************"
