@@ -14,21 +14,21 @@ spec:
         app: netperf-pod
     spec:
       tolerations:
-      - key: node-role.kubernetes.io/master
-        operator: Exists
-        effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
       containers:
-      - name: netperf-pod
-        image: vcr.vngcloud.vn/60108-annd2-ingress/k8s-netperf:1.0.0
-        ports:
-        - containerPort: 5001
-        - containerPort: 8079
-        - containerPort: 8080
-        - containerPort: 8081
-        - containerPort: 12865
+        - name: netperf-pod
+          image: vcr.vngcloud.vn/60108-annd2-ingress/k8s-netperf:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5001
+            - containerPort: 8079
+            - containerPort: 8080
+            - containerPort: 8081
+            - containerPort: 12865
 
 ---
-
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -46,15 +46,89 @@ spec:
     spec:
       hostNetwork: true
       tolerations:
-      - key: node-role.kubernetes.io/master
-        operator: Exists
-        effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
       containers:
-      - name: netperf-host
-        image: vcr.vngcloud.vn/60108-annd2-ingress/k8s-netperf:1.0.0
-        ports:
-        - containerPort: 5001
-        - containerPort: 8079
-        - containerPort: 8080
-        - containerPort: 8081
-        - containerPort: 12865
+        - name: netperf-host
+          image: vcr.vngcloud.vn/60108-annd2-ingress/k8s-netperf:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5001
+            - containerPort: 8079
+            - containerPort: 8080
+            - containerPort: 8081
+            - containerPort: 12865
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netperf-svc
+  labels:
+    app: netperf-svc
+spec:
+  replicas: 1 # must be 1 for netperf to work
+  selector:
+    matchLabels:
+      app: netperf-svc
+  template:
+    metadata:
+      labels:
+        app: netperf-svc
+    spec:
+      containers:
+        - name: netperf-svc
+          image: vcr.vngcloud.vn/60108-annd2-ingress/k8s-netperf:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5001
+            - containerPort: 8079
+            - containerPort: 8080
+            - containerPort: 8081
+            - containerPort: 12865
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: netperf-service
+  labels:
+    name: netperf-service
+spec:
+  ports:
+    # the port that this service should serve on
+    - name: iperf-tcp
+      protocol: TCP
+      port: 5001
+      targetPort: 5001
+    - name: iperf-udp
+      protocol: UDP
+      port: 5001
+      targetPort: 5001
+    - name: fortio-http
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+    - name: fortio-proxy
+      protocol: TCP
+      port: 8081
+      targetPort: 8081
+    - name: fortio-grpc
+      protocol: TCP
+      port: 8079
+      targetPort: 8079
+    - name: netperf-12865
+      protocol: TCP
+      port: 12865
+      targetPort: 12865
+
+    # these port use for netperf data transfer https://github.com/tohojo/flent/issues/212
+    - name: netperf-10001
+      protocol: TCP
+      port: 10001
+      targetPort: 10001
+    - name: netperf-10002
+      protocol: TCP
+      port: 10002
+      targetPort: 10002
+  selector:
+    app: netperf-svc

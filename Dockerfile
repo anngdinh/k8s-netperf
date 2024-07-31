@@ -16,6 +16,8 @@ FROM alpine:3.7
 # This is a mixed container of NetPerf and Iperf for Kubernetes network performance testing
 MAINTAINER info@leannet.eu
 
+RUN apk update
+RUN apk add busybox-extras curl
 # Intall iperf using apk and clean the cache 
 RUN apk add --no-cache iperf iputils
 

@@ -1,0 +1,12 @@
+version: "3.3"
+services:
+  octant:
+    image: vcr.vngcloud.vn/60108-annd2-ingress/k8s-netperf:1.0.0
+    container_name: netperf
+    ports:
+      - 5001:5001
+      - 8079:8079
+      - 8080:8080
+      - 8081:8081
+      - 12865:12865
+    restart: always

@@ -23,6 +23,9 @@ POD_LOCAL_2_IP=""
 POD_REMOTE_1_IP=""
 POD_REMOTE_2_IP=""
 
+SERVICE="netperf-service"
+SERVICE_IP=""
+
 remove_all_whitespace() {
     echo "$1" | tr -d '[:space:]'
 }
@@ -53,8 +56,8 @@ netperfFunc() {
     local time=$3
     local type=$4
     local format=$5
-    echo "- Running: kubectl exec -it $pod -- netperf -H $target_ip -l $time -P 1 -t $type -- -r $NETPERF_REQUEST_PACKET_SIZE,$NETPERF_RESPONSE_PACKET_SIZE -o \"$format\""
-    local output=$(kubectl exec -it $pod -- netperf -H $target_ip -l $time -P 1 -t $type -- -r $NETPERF_REQUEST_PACKET_SIZE,$NETPERF_RESPONSE_PACKET_SIZE -o "$format")
+    echo "- Running: kubectl exec -it $pod -- netperf -H $target_ip -p 12865 -l $time -t $type -- -P 10001,10002 -r $NETPERF_REQUEST_PACKET_SIZE,$NETPERF_RESPONSE_PACKET_SIZE -o \"$format\""
+    local output=$(kubectl exec -it $pod -- netperf -H $target_ip -p 12865 -l $time -t $type -- -P 10001,10002 -r $NETPERF_REQUEST_PACKET_SIZE,$NETPERF_RESPONSE_PACKET_SIZE -o "$format")
     # echo "$output" | tail -n 2
 
     key=$(remove_all_whitespace "$format")
@@ -100,8 +103,12 @@ getNodeIPByName() {
 
 getK8sInfo() {
     local nodes=$(kubectl get nodes -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | head -n 2)
-    NODE1=$(echo "$nodes" | sed -n '1p')
-    NODE2=$(echo "$nodes" | sed -n '2p')
+    if [ -z "$NODE1" ]; then
+        NODE1=$(echo "$nodes" | sed -n '1p')
+    fi
+    if [ -z "$NODE2" ]; then
+        NODE2=$(echo "$nodes" | sed -n '2p')
+    fi
 
     if [ -z "$NODE1" ] || [ -z "$NODE2" ]; then
         echo "Error: Could not get the node names"
@@ -135,11 +142,17 @@ getK8sInfo() {
         echo "Error: Could not get the pod IPs"
         exit 1
     fi
+
+    SERVICE_IP=$(kubectl get svc $SERVICE -o jsonpath='{.spec.clusterIP}')
+    if [ -z "$SERVICE_IP" ]; then
+        echo "Error: Could not get service IP"
+        exit 1
+    fi
 }
 
 getK8sInfo
 
-echo "********** Ping Node to Node **********"
+echo "********** Ping Node to Node ********** $(date +"%Y-%m-%d %H:%M:%S")"
 pingFunc $POD_LOCAL_1 $NODE_2_IP $PING_INTERVAL $PING_COUNT
 pingFunc $POD_LOCAL_2 $NODE_1_IP $PING_INTERVAL $PING_COUNT
 pingFunc $POD_LOCAL_1 $POD_LOCAL_2_IP $PING_INTERVAL $PING_COUNT
@@ -147,7 +160,7 @@ pingFunc $POD_LOCAL_2 $POD_LOCAL_1_IP $PING_INTERVAL $PING_COUNT
 echo "***************************************"
 echo ""
 
-echo "********** Ping Node to Pod **********"
+echo "********** Ping Node to Pod ********** $(date +"%Y-%m-%d %H:%M:%S")"
 pingFunc $POD_LOCAL_1 $POD_REMOTE_2_IP $PING_INTERVAL $PING_COUNT
 pingFunc $POD_LOCAL_2 $POD_REMOTE_1_IP $PING_INTERVAL $PING_COUNT
 pingFunc $POD_REMOTE_1 $NODE_2_IP $PING_INTERVAL $PING_COUNT
@@ -155,65 +168,88 @@ pingFunc $POD_REMOTE_2 $NODE_1_IP $PING_INTERVAL $PING_COUNT
 echo "**************************************"
 echo ""
 
-echo "********** Ping Pod to Pod **********"
+echo "********** Ping Pod to Pod ********** $(date +"%Y-%m-%d %H:%M:%S")"
 pingFunc $POD_REMOTE_1 $POD_REMOTE_2_IP $PING_INTERVAL $PING_COUNT
 pingFunc $POD_REMOTE_2 $POD_REMOTE_1_IP $PING_INTERVAL $PING_COUNT
 echo "*************************************"
 echo ""
 
+# echo "********** Ping Pod to Service ********** $(date +"%Y-%m-%d %H:%M:%S")"
+# can't ping service IP
+# echo "*****************************************"
+# echo ""
+
 ############ Iperf ############
-echo "********** Iperf Node to Node **********"
+echo "********** Iperf Node to Node ********** $(date +"%Y-%m-%d %H:%M:%S")"
 iperfFunc $POD_LOCAL_1 $NODE_2_IP $IPERF_TIME
 iperfFunc $POD_LOCAL_2 $NODE_1_IP $IPERF_TIME
 echo "****************************************"
 echo ""
 
-echo "********** Iperf Node to Pod **********"
+echo "********** Iperf Node to Pod ********** $(date +"%Y-%m-%d %H:%M:%S")"
 iperfFunc $POD_LOCAL_1 $POD_REMOTE_2_IP $IPERF_TIME
 iperfFunc $POD_LOCAL_2 $POD_REMOTE_1_IP $IPERF_TIME
 echo "***************************************"
 echo ""
 
-echo "********** Iperf Pod to Pod **********"
+echo "********** Iperf Pod to Pod ********** $(date +"%Y-%m-%d %H:%M:%S")"
 iperfFunc $POD_REMOTE_1 $POD_REMOTE_2_IP $IPERF_TIME
 iperfFunc $POD_REMOTE_2 $POD_REMOTE_1_IP $IPERF_TIME
 echo "**************************************"
 echo ""
 
+echo "********** Iperf Pod to Service ********** $(date +"%Y-%m-%d %H:%M:%S")"
+iperfFunc $POD_REMOTE_1 $SERVICE_IP $IPERF_TIME
+iperfFunc $POD_REMOTE_2 $SERVICE_IP $IPERF_TIME
+echo "******************************************"
+echo ""
+
 ############ Netperf long connection ############
-echo "********** Netperf Long Node to Node **********"
+echo "********** Netperf Long Node to Node ********** $(date +"%Y-%m-%d %H:%M:%S")"
 netperfFunc $POD_LOCAL_1 $NODE_2_IP $NETPERF_TIME TCP_RR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
 netperfFunc $POD_LOCAL_2 $NODE_1_IP $NETPERF_TIME TCP_RR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
 echo "***********************************************"
 echo ""
 
-echo "********** Netperf Long Node to Pod **********"
+echo "********** Netperf Long Node to Pod ********** $(date +"%Y-%m-%d %H:%M:%S")"
 netperfFunc $POD_LOCAL_1 $POD_REMOTE_2_IP $NETPERF_TIME TCP_RR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
 netperfFunc $POD_LOCAL_2 $POD_REMOTE_1_IP $NETPERF_TIME TCP_RR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
 echo "**********************************************"
 echo ""
 
-echo "********** Netperf Long Pod to Pod **********"
+echo "********** Netperf Long Pod to Pod ********** $(date +"%Y-%m-%d %H:%M:%S")"
 netperfFunc $POD_REMOTE_1 $POD_REMOTE_2_IP $NETPERF_TIME TCP_RR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
 netperfFunc $POD_REMOTE_2 $POD_REMOTE_1_IP $NETPERF_TIME TCP_RR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
 echo "*********************************************"
 echo ""
 
+echo "********** Netperf Long Pod to Service ********** $(date +"%Y-%m-%d %H:%M:%S")"
+netperfFunc $POD_REMOTE_1 $SERVICE_IP $NETPERF_TIME TCP_RR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
+netperfFunc $POD_REMOTE_2 $SERVICE_IP $NETPERF_TIME TCP_RR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
+echo "*************************************************"
+echo ""
+
 # ############ Netperf short connection ############
-echo "********** Netperf Short Node to Node **********"
+echo "********** Netperf Short Node to Node ********** $(date +"%Y-%m-%d %H:%M:%S")"
 netperfFunc $POD_LOCAL_1 $NODE_2_IP $NETPERF_TIME TCP_CRR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
 netperfFunc $POD_LOCAL_2 $NODE_1_IP $NETPERF_TIME TCP_CRR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
 echo "************************************************"
 echo ""
 
-echo "********** Netperf Short Node to Pod **********"
+echo "********** Netperf Short Node to Pod ********** $(date +"%Y-%m-%d %H:%M:%S")"
 netperfFunc $POD_LOCAL_1 $POD_REMOTE_2_IP $NETPERF_TIME TCP_CRR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
 netperfFunc $POD_LOCAL_2 $POD_REMOTE_1_IP $NETPERF_TIME TCP_CRR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
 echo "***********************************************"
 echo ""
 
-echo "********** Netperf Short Pod to Pod **********"
+echo "********** Netperf Short Pod to Pod ********** $(date +"%Y-%m-%d %H:%M:%S")"
 netperfFunc $POD_REMOTE_1 $POD_REMOTE_2_IP $NETPERF_TIME TCP_CRR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
 netperfFunc $POD_REMOTE_2 $POD_REMOTE_1_IP $NETPERF_TIME TCP_CRR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
 echo "**********************************************"
+echo ""
+
+echo "********** Netperf Short Pod to Service ********** $(date +"%Y-%m-%d %H:%M:%S")"
+netperfFunc $POD_REMOTE_1 $SERVICE_IP $NETPERF_TIME TCP_CRR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
+netperfFunc $POD_REMOTE_2 $SERVICE_IP $NETPERF_TIME TCP_CRR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
+echo "**************************************************"
 echo ""
