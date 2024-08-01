@@ -103,30 +103,30 @@ getNodeIPByName() {
 
 getK8sInfo() {
     local nodes=$(kubectl get nodes -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | head -n 2)
-    if [ -z "$NODE1" ]; then
-        NODE1=$(echo "$nodes" | sed -n '1p')
+    if [ -z "$NODE_1" ]; then
+        NODE_1=$(echo "$nodes" | sed -n '1p')
     fi
-    if [ -z "$NODE2" ]; then
-        NODE2=$(echo "$nodes" | sed -n '2p')
+    if [ -z "$NODE_2" ]; then
+        NODE_2=$(echo "$nodes" | sed -n '2p')
     fi
 
-    if [ -z "$NODE1" ] || [ -z "$NODE2" ]; then
+    if [ -z "$NODE_1" ] || [ -z "$NODE_2" ]; then
         echo "Error: Could not get the node names"
         exit 1
     fi
 
-    NODE_1_IP=$(getNodeIPByName $NODE1)
-    NODE_2_IP=$(getNodeIPByName $NODE2)
+    NODE_1_IP=$(getNodeIPByName $NODE_1)
+    NODE_2_IP=$(getNodeIPByName $NODE_2)
 
     if [ -z "$NODE_1_IP" ] || [ -z "$NODE_2_IP" ]; then
         echo "Error: Could not get the node IPs"
         exit 1
     fi
 
-    POD_LOCAL_1=$(getPodsWithPrefixOnNode "netperf-host" $NODE1)
-    POD_LOCAL_2=$(getPodsWithPrefixOnNode "netperf-host" $NODE2)
-    POD_REMOTE_1=$(getPodsWithPrefixOnNode "netperf-pod" $NODE1)
-    POD_REMOTE_2=$(getPodsWithPrefixOnNode "netperf-pod" $NODE2)
+    POD_LOCAL_1=$(getPodsWithPrefixOnNode "netperf-host" $NODE_1)
+    POD_LOCAL_2=$(getPodsWithPrefixOnNode "netperf-host" $NODE_2)
+    POD_REMOTE_1=$(getPodsWithPrefixOnNode "netperf-pod" $NODE_1)
+    POD_REMOTE_2=$(getPodsWithPrefixOnNode "netperf-pod" $NODE_2)
 
     if [ -z "$POD_LOCAL_1" ] || [ -z "$POD_LOCAL_2" ] || [ -z "$POD_REMOTE_1" ] || [ -z "$POD_REMOTE_2" ]; then
         echo "Error: Could not get the pod names"
@@ -148,6 +148,13 @@ getK8sInfo() {
         echo "Error: Could not get service IP"
         exit 1
     fi
+
+    echo "NODE_1: $NODE_1"
+    echo "NODE_2: $NODE_2"
+    echo "POD_LOCAL_1: $POD_LOCAL_1"
+    echo "POD_LOCAL_2: $POD_LOCAL_2"
+    echo "POD_REMOTE_1: $POD_REMOTE_1"
+    echo "POD_REMOTE_2: $POD_REMOTE_2"
 }
 
 getK8sInfo
