@@ -1,5 +1,7 @@
 #!/bin/sh
 
+CONTAINER_NAME="netperf"
+
 PING_INTERVAL=0.001
 PING_COUNT=30000
 
@@ -9,8 +11,12 @@ NETPERF_TIME=60
 NETPERF_REQUEST_PACKET_SIZE=1024
 NETPERF_RESPONSE_PACKET_SIZE=1024
 
-NODE_1=""
-NODE_2=""
+WRK_TIME=10
+WRK_CONNECTIONS=100
+WRK_THREADS=10
+
+NODE_1="$NODE_1"
+NODE_2="$NODE_2"
 POD_LOCAL_1=""
 POD_LOCAL_2=""
 POD_REMOTE_1=""
@@ -35,8 +41,8 @@ pingFunc() {
     local target_ip=$2
     local interval=$3
     local count=$4
-    echo "- Running: kubectl exec -it $pod -- ping -c $count -i $interval -q $target_ip"
-    local output=$(kubectl exec -it $pod -- ping -c $count -i $interval -q $target_ip)
+    echo "- Running: kubectl exec -it $pod -c $CONTAINER_NAME -- ping -c $count -i $interval -q $target_ip"
+    local output=$(kubectl exec -it $pod -c $CONTAINER_NAME -- ping -c $count -i $interval -q $target_ip)
     echo "$output" | tail -n 2
 }
 
@@ -44,8 +50,8 @@ iperfFunc() {
     local pod=$1
     local target_ip=$2
     local time=$3
-    echo "- Running: kubectl exec -it $pod -- iperf -c $target_ip -i 1 -t $time"
-    local output=$(kubectl exec -it $pod -- iperf -c $target_ip -i 1 -t $time)
+    echo "- Running: kubectl exec -it $pod -c $CONTAINER_NAME -- iperf -c $target_ip -i 1 -t $time"
+    local output=$(kubectl exec -it $pod -c $CONTAINER_NAME -- iperf -c $target_ip -i 1 -t $time)
     echo "[ ID] Interval       Transfer     Bandwidth"
     echo "$output" | tail -n 1
 }
@@ -56,8 +62,8 @@ netperfFunc() {
     local time=$3
     local type=$4
     local format=$5
-    echo "- Running: kubectl exec -it $pod -- netperf -H $target_ip -p 12865 -l $time -t $type -- -P 10001,10002 -r $NETPERF_REQUEST_PACKET_SIZE,$NETPERF_RESPONSE_PACKET_SIZE -o \"$format\""
-    local output=$(kubectl exec -it $pod -- netperf -H $target_ip -p 12865 -l $time -t $type -- -P 10001,10002 -r $NETPERF_REQUEST_PACKET_SIZE,$NETPERF_RESPONSE_PACKET_SIZE -o "$format")
+    echo "- Running: kubectl exec -it $pod -c $CONTAINER_NAME -- netperf -H $target_ip -p 12865 -l $time -t $type -- -P 10001,10002 -r $NETPERF_REQUEST_PACKET_SIZE,$NETPERF_RESPONSE_PACKET_SIZE -o \"$format\""
+    local output=$(kubectl exec -it $pod -c $CONTAINER_NAME -- netperf -H $target_ip -p 12865 -l $time -t $type -- -P 10001,10002 -r $NETPERF_REQUEST_PACKET_SIZE,$NETPERF_RESPONSE_PACKET_SIZE -o "$format")
     # echo "$output" | tail -n 2
 
     key=$(remove_all_whitespace "$format")
@@ -83,6 +89,18 @@ netperfFunc() {
         printf "%-15s" "$v"
     done
     printf "\n"
+}
+
+wrkFunc() {
+    local pod=$1
+    local target_ip=$2
+    local time=$3
+    local connections=$4
+    local threads=$5
+    local port=$6
+    echo "- Running: kubectl exec -it $pod -c $CONTAINER_NAME -- wrk -t$threads -c$connections -d$time http://$target_ip:$port"
+    local output=$(kubectl exec -it $pod -c $CONTAINER_NAME -- wrk -t$threads -c$connections -d$time http://$target_ip:$port)
+    echo "$output"
 }
 
 getPodsWithPrefixOnNode() {
@@ -260,3 +278,27 @@ netperfFunc $POD_REMOTE_1 $SERVICE_IP $NETPERF_TIME TCP_CRR "MIN_LATENCY,MAX_LAT
 netperfFunc $POD_REMOTE_2 $SERVICE_IP $NETPERF_TIME TCP_CRR "MIN_LATENCY,MAX_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY"
 echo "**************************************************"
 echo ""
+
+# ############ Wrk ############
+echo "********** Wrk Node to Node ********** $(date +"%Y-%m-%d %H:%M:%S")"
+wrkFunc $POD_LOCAL_1 $NODE_2_IP $WRK_TIME $WRK_CONNECTIONS $WRK_THREADS 80
+wrkFunc $POD_LOCAL_2 $NODE_1_IP $WRK_TIME $WRK_CONNECTIONS $WRK_THREADS 80
+echo "**************************************"
+echo ""
+
+echo "********** Wrk Node to Pod ********** $(date +"%Y-%m-%d %H:%M:%S")"
+wrkFunc $POD_LOCAL_1 $POD_REMOTE_2_IP $WRK_TIME $WRK_CONNECTIONS $WRK_THREADS 80
+wrkFunc $POD_LOCAL_2 $POD_REMOTE_1_IP $WRK_TIME $WRK_CONNECTIONS $WRK_THREADS 80
+echo "*************************************"
+echo ""
+
+echo "********** Wrk Pod to Pod ********** $(date +"%Y-%m-%d %H:%M:%S")"
+wrkFunc $POD_REMOTE_1 $POD_REMOTE_2_IP $WRK_TIME $WRK_CONNECTIONS $WRK_THREADS 80
+wrkFunc $POD_REMOTE_2 $POD_REMOTE_1_IP $WRK_TIME $WRK_CONNECTIONS $WRK_THREADS 80
+echo "************************************"
+echo ""
+
+echo "********** Wrk Pod to Service ********** $(date +"%Y-%m-%d %H:%M:%S")"
+wrkFunc $POD_REMOTE_1 $SERVICE_IP $WRK_TIME $WRK_CONNECTIONS $WRK_THREADS 80
+wrkFunc $POD_REMOTE_2 $SERVICE_IP $WRK_TIME $WRK_CONNECTIONS $WRK_THREADS 80
+echo "***************************************"
