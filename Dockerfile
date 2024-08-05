@@ -1,7 +1,7 @@
 FROM alpine:3.7 as netperfbuild
 
 # Install dependencies for netperf compile
-RUN apk add --update --no-cache g++ make curl
+RUN apk add --update --no-cache g++ make curl perl linux-headers
 	
 # Download and install NetPerf
 RUN curl -LO https://github.com/HewlettPackard/netperf/archive/netperf-2.7.0.tar.gz \
@@ -9,6 +9,12 @@ RUN curl -LO https://github.com/HewlettPackard/netperf/archive/netperf-2.7.0.tar
     && mv netperf-netperf-2.7.0/ netperf-2.7.0
 RUN cd netperf-2.7.0 && ./configure \
     && make && make install
+
+# Download and install wrk
+RUN curl -OL curl -OL https://github.com/wg/wrk/archive/refs/tags/4.2.0.tar.gz \
+    && tar -xzf 4.2.0.tar.gz \
+    && mv wrk-4.2.0 wrk
+RUN cd wrk && make && mv wrk /usr/local/bin
 
 FROM fortio/fortio:1.3.0 as fortiobuild
 
@@ -24,6 +30,7 @@ RUN apk add --no-cache iperf iputils
 # Copy netperf binarias from the built image
 COPY --from=netperfbuild /usr/local/bin/netperf /usr/local/bin/netperf
 COPY --from=netperfbuild /usr/local/bin/netserver /usr/local/bin/netserver
+COPY --from=netperfbuild /usr/local/bin/wrk /usr/local/bin/wrk
 
 # Copy the fortio binaries and files
 COPY --from=fortiobuild /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
