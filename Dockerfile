@@ -23,7 +23,7 @@ FROM alpine:3.7
 MAINTAINER info@leannet.eu
 
 RUN apk update
-RUN apk add busybox-extras curl
+RUN apk add busybox-extras curl tcpdump
 # Intall iperf using apk and clean the cache 
 RUN apk add --no-cache iperf iputils
 
